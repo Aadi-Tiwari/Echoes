@@ -8,7 +8,8 @@ export function browserSpeak(
   text: string,
   onStart?: () => void,
   onEnd?: () => void,
-  onError?: (msg: string) => void
+  onError?: (msg: string) => void,
+  onBoundary?: (index: number) => void
 ): void {
   if (typeof window === "undefined" || !window.speechSynthesis) {
     onError?.("Browser TTS not supported");
@@ -40,6 +41,7 @@ export function browserSpeak(
   utterance.pitch = 1.0;
   utterance.volume = 1;
 
+  utterance.onboundary = event => onBoundary?.(event.charIndex);
   utterance.onstart = () => onStart?.();
   utterance.onend = () => {
     currentUtterance = null;

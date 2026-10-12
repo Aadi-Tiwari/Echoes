@@ -5,11 +5,13 @@ const DEFAULT_VOICE_ID = "pNInz6obpgDQGcFmaJgB"; // Adam
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, voiceId } = await request.json();
-    if (!text?.trim()) return new Response("Missing text", { status: 400 });
+    const { text, voiceId } = (await request.json().catch(() => ({}))) || {};
+    if (typeof text !== "string" || !text.trim() || (voiceId !== undefined && typeof voiceId !== "string")) {
+      return new Response("Provide text and a valid voice ID", { status: 400 });
+    }
 
     const apiKey = process.env.ELEVENLABS_API_KEY;
-    if (!apiKey) return new Response("ElevenLabs API key not configured", { status: 500 });
+    if (!apiKey) return new Response("Audio could not be generated. Use your device's voice instead.", { status: 503 });
 
     const client = new ElevenLabsClient({ apiKey });
     const useVoiceId = voiceId || DEFAULT_VOICE_ID;
@@ -31,9 +33,7 @@ export async function POST(request: NextRequest) {
         "X-Content-Type-Options": "nosniff",
       },
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[tts] error:", message);
-    return new Response("TTS generation failed", { status: 500 });
+  } catch {
+    return new Response("Audio could not be generated. Use your device's voice instead.", { status: 502 });
   }
 }

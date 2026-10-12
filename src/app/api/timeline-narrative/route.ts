@@ -1,5 +1,3 @@
-import { type NextRequest } from "next/server";
-
 interface TimelineItem {
   year: string;
   city: string;
@@ -7,10 +5,12 @@ interface TimelineItem {
   newspaper: string;
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { items, query }: { items: TimelineItem[]; query: string } = await request.json();
-    if (!items?.length || !query) return Response.json({ script: null });
+    const { items, query }: { items: TimelineItem[]; query: string } = (await request.json().catch(() => ({}))) || {};
+    if (!Array.isArray(items) || !items.length || items.some(item => !item || typeof item !== "object") ||
+        typeof query !== "string" || !query.trim()) return Response.json({ script: null }, { status: 400 });
+    if (!process.env.GROQ_API_KEY) return Response.json({ script: null }, { status: 503 });
 
     const bulletPoints = items
       .map(it => {
@@ -22,12 +22,13 @@ export async function POST(request: NextRequest) {
 
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
+      signal: AbortSignal.timeout(20_000),
       headers: {
         "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "llama3-8b-8192",
+        model: "openai/gpt-oss-20b",
         messages: [
           {
             role: "system",
@@ -45,16 +46,17 @@ Return ONLY the narration text. No labels, no headers.`,
             content: `Topic: ${query}\n\nSources:\n${bulletPoints}`,
           },
         ],
-        max_tokens: 350,
+        max_completion_tokens: 2048,
+        reasoning_effort: "low",
         temperature: 0.7,
       }),
     });
 
-    if (!res.ok) return Response.json({ script: null });
+    if (!res.ok) return Response.json({ script: null }, { status: 502 });
     const data = await res.json();
     const script = data.choices?.[0]?.message?.content?.trim() || null;
-    return Response.json({ script });
+    return Response.json({ script }, { status: script ? 200 : 502 });
   } catch {
-    return Response.json({ script: null });
+    return Response.json({ script: null }, { status: 502 });
   }
 }

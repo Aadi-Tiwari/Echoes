@@ -129,13 +129,10 @@ function HeirloomInner() {
           body: JSON.stringify({ text: heirloomText, title: `The History of ${name}`, context: "", voiceId: vs.voiceId }),
         });
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          const msg = errData.error || `API error ${res.status}`;
-          if (msg.includes("quota_exceeded") || msg.includes("quota"))
-            throw new Error("ElevenLabs quota exceeded. Get free hackathon credits from the ElevenLabs sponsor table.");
-          throw new Error(msg);
+          setBrowserText(heirloomText);
+        } else {
+          setAudioUrl(URL.createObjectURL(await res.blob()));
         }
-        setAudioUrl(URL.createObjectURL(await res.blob()));
       }
       window.dispatchEvent(new CustomEvent("echoes:context", {
         detail: { title: `The History of ${name}`, context: ctxData.context || "" }
@@ -369,6 +366,11 @@ function HeirloomInner() {
 
       {/* ── CONTENT ───────────────────────────────────────────────── */}
       <div className="max-w-5xl mx-auto px-6 pb-16">
+        {error && (
+          <div role="alert" style={{ background: "rgba(200,50,50,0.07)", border: "1px solid rgba(200,50,50,0.2)", color: "#f87171" }} className="rounded-xl px-4 py-3 text-sm mb-4">
+            {error}
+          </div>
+        )}
         <AnimatePresence mode="wait">
           {!hasResult ? (
             <motion.div
@@ -456,11 +458,6 @@ function HeirloomInner() {
                 </div>
               </div>
 
-              {error && (
-                <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} style={{ background: "rgba(200,50,50,0.07)", border: "1px solid rgba(200,50,50,0.2)", color: "#f87171" }} className="rounded-xl px-4 py-3 text-sm">
-                  {error}
-                </motion.div>
-              )}
             </motion.div>
           ) : (
             <motion.div
@@ -584,7 +581,7 @@ function HeirloomInner() {
               {/* Audio + Transcript side-by-side */}
               <div className="flex flex-col md:flex-row gap-4 items-stretch">
                 <div className="md:w-[45%] flex-shrink-0">
-                  {USE_BROWSER_TTS && browserText
+                  {browserText
                     ? <BrowserAudioPlayer
                         text={browserText}
                         title={`The History of ${objectName}`}

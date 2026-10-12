@@ -1,5 +1,3 @@
-import { type NextRequest } from "next/server";
-
 // Heuristic pre-filter - runs before the LLM, catches obvious garbage lines.
 // A line is kept only if it has at least 2 tokens that are real-word-like
 // (3+ letters, no digits or symbols) AND those tokens make up at least 45% of the line.
@@ -23,24 +21,28 @@ function prefilter(raw: string): string {
   return kept.join("\n").trim();
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
+  let prefiltered = "";
   try {
-    const { text } = await request.json();
-    if (!text?.trim()) return Response.json({ cleaned: text });
+    const { text } = (await request.json().catch(() => ({}))) || {};
+    if (typeof text !== "string") return Response.json({ cleaned: null }, { status: 400 });
+    if (!text.trim()) return Response.json({ cleaned: "" });
 
     // Step 1: heuristic garbage filter - no LLM needed
-    const prefiltered = prefilter(text);
+    prefiltered = prefilter(text);
     if (!prefiltered) return Response.json({ cleaned: "" });
+    if (!process.env.GROQ_API_KEY) return Response.json({ cleaned: prefiltered, fallback: true });
 
     // Step 2: LLM pass for word-level OCR corrections and paragraph formatting
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
+      signal: AbortSignal.timeout(20_000),
       headers: {
         "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "llama3-70b-8192",
+        model: "openai/gpt-oss-120b",
         messages: [
           {
             role: "system",
@@ -57,20 +59,21 @@ export async function POST(request: NextRequest) {
             content: prefiltered.slice(0, 3000),
           },
         ],
-        max_tokens: 2000,
+        max_completion_tokens: 4096,
+        reasoning_effort: "low",
         temperature: 0.1,
       }),
     });
 
     if (!res.ok) {
       // LLM failed - return the pre-filtered text at least
-      return Response.json({ cleaned: prefiltered });
+      return Response.json({ cleaned: prefiltered, fallback: true });
     }
 
     const data = await res.json();
     const cleaned = data.choices?.[0]?.message?.content?.trim() || prefiltered;
     return Response.json({ cleaned });
   } catch {
-    return Response.json({ cleaned: null });
+    return Response.json({ cleaned: prefiltered || null, fallback: true });
   }
 }

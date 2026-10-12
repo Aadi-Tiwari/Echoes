@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Echoes
 
-## Getting Started
+Explore historical documents through archive search, narration, and questions grounded in the text you select.
 
-First, run the development server:
+Echoes combines a Next.js interface with Library of Congress search, OCR, object recognition, and optional speech and language services. Archive mode accepts pasted or uploaded material; Discover searches public collections; Heirloom explores the history of an object.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Run locally
+
+Use Node.js 22.17 or newer and npm.
+
+```sh
+npm ci
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Copy `.env.example` to `.env.local`, then run:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```sh
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open <http://localhost:3000>. The interface starts without provider keys. Some features need network access or downloaded model assets.
 
-## Learn More
+| Setting | Purpose |
+| --- | --- |
+| `GROQ_API_KEY` | Document questions, OCR cleanup, and timeline narration |
+| `ELEVENLABS_API_KEY` | Server-generated speech |
+| `NEXT_PUBLIC_BROWSER_TTS` | Set to `true` to use the browser speech path |
 
-To learn more about Next.js, take a look at the following resources:
+Keep provider keys on the server. Only the browser speech switch belongs in a `NEXT_PUBLIC_` variable.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Behavior
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Questions are answered from the supplied document. Missing credentials or provider failures return an explicit unavailable response.
+- OCR cleanup preserves the extracted text when the language service is unavailable.
+- Narration falls back to the browser voice when cloud speech is unavailable. Browser voice availability and autoplay permissions depend on the device.
+- Archive outages appear as search errors, separately from searches with no matches.
+- Search results come from external archives. Generated narration, answers, and object histories still need checking against primary sources.
+- Uploads, selected document text, and speech text may be sent to the services used by the selected feature. This is not an offline document vault.
 
-## Deploy on Vercel
+## Source map
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `src/app/`: pages and API routes.
+- `src/components/`: upload, playback, archive, and visualization interfaces.
+- `src/lib/`: shared browser and data helpers.
+- `tests/routes.test.mjs`: route tests with provider responses mocked.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Checks
+
+```sh
+npm test
+npm run build
+```
+
+The tests exercise input validation, missing credentials, successful provider responses, and failure fallbacks. A production build checks compilation and types. Neither check proves that external archive APIs, downloaded models, or paid providers are available in a deployment.

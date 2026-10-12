@@ -27,7 +27,7 @@ interface ContextData {
 
 const FEATURES = [
   { label: "OCR Scan", desc: "Camera or image upload" },
-  { label: "AI Narration", desc: "ElevenLabs voice" },
+  { label: "AI Narration", desc: "Document narration" },
   { label: "Ask Questions", desc: "Live archive Q&A" },
 ];
 
@@ -127,15 +127,12 @@ function SpeakInner() {
           body: JSON.stringify({ text: finalText, title: title || ctxData.title || "", context: ctxData.context || "", voiceId: vs.voiceId }),
         });
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          const msg = errData.error || `API error ${res.status}`;
-          if (msg.includes("quota_exceeded") || msg.includes("quota"))
-            throw new Error("ElevenLabs quota exceeded. Get free hackathon credits from the ElevenLabs sponsor table.");
-          throw new Error(msg);
+          setBrowserText(finalText);
+        } else {
+          const blob = await res.blob();
+          if (blob.size === 0) throw new Error("Audio could not be generated. Please try again.");
+          setAudioUrl(URL.createObjectURL(blob));
         }
-        const blob = await res.blob();
-        if (blob.size === 0) throw new Error("Received empty audio from ElevenLabs");
-        setAudioUrl(URL.createObjectURL(blob));
       }
       // Dispatch context to ConvAI widget
       window.dispatchEvent(new CustomEvent("echoes:context", {
@@ -185,7 +182,9 @@ function SpeakInner() {
         }),
       });
       const { answer } = await answerRes.json();
-      const answerText = answer || "The historical record is silent on this matter.";
+      if (!answerRes.ok) throw new Error(answer || "Document questions are unavailable.");
+      if (typeof answer !== "string" || !answer.trim()) throw new Error("No answer was returned. Please try again.");
+      const answerText = answer;
 
       if (USE_BROWSER_TTS) {
         setQaItems(prev => [...prev, { id, question: askedQuestion, browserText: answerText }]);
@@ -195,9 +194,12 @@ function SpeakInner() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: answerText, title: `Answer: ${askedQuestion}`, context: "", voiceId: voiceSelection?.voiceId }),
         });
-        if (!res.ok) throw new Error("Failed to generate answer");
-        const blob = await res.blob();
-        setQaItems(prev => [...prev, { id, question: askedQuestion, audioUrl: URL.createObjectURL(blob) }]);
+        if (!res.ok) {
+          setQaItems(prev => [...prev, { id, question: askedQuestion, browserText: answerText }]);
+        } else {
+          const blob = await res.blob();
+          setQaItems(prev => [...prev, { id, question: askedQuestion, audioUrl: URL.createObjectURL(blob) }]);
+        }
       }
     } catch (e) { setError(e instanceof Error ? e.message : "Failed to answer"); }
     finally { setQaLoading(false); }
@@ -501,14 +503,15 @@ function SpeakInner() {
                 </div>
               </div>
 
-              {error && (
-                <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} style={{ background: "rgba(200,50,50,0.07)", border: "1px solid rgba(200,50,50,0.2)", color: "#f87171" }} className="rounded-xl px-4 py-3 text-sm">
-                  {error}
-                </motion.div>
-              )}
             </motion.div>
           )}
         </AnimatePresence>
+
+        {error && (
+          <div role="alert" style={{ background: "rgba(200,50,50,0.07)", border: "1px solid rgba(200,50,50,0.2)", color: "#f87171" }} className="rounded-xl px-4 py-3 text-sm mb-4">
+            {error}
+          </div>
+        )}
 
         {/* Results */}
         <AnimatePresence>
@@ -572,7 +575,7 @@ function SpeakInner() {
                 <div className="flex flex-col md:flex-row gap-4 items-stretch">
                   {/* Left: player */}
                   <div className="md:w-[45%] flex-shrink-0">
-                    {USE_BROWSER_TTS && browserText
+                    {browserText
                       ? <BrowserAudioPlayer
                           text={browserText}
                           title={title || contextData?.title || "Historical Narration"}
@@ -584,7 +587,7 @@ function SpeakInner() {
                         : null}
                   </div>
                   {/* Right: transcript - only in browser TTS mode */}
-                  {USE_BROWSER_TTS && (
+                  {browserText && (
                     <div className="flex-1 min-h-[320px] md:min-h-0">
                       <TranscriptPanel
                         text={browserText || ""}
@@ -603,7 +606,7 @@ function SpeakInner() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p style={{ color: "#f2ead8" }} className="text-sm font-semibold tracking-wide mb-0.5">Live Voice Conversation</p>
-                  <p style={{ color: "#7a6550" }} className="text-xs leading-relaxed">Talk directly with the archive using your voice. Powered by ElevenLabs Conversational AI - the archive will respond in real time.</p>
+                  <p style={{ color: "#7a6550" }} className="text-xs leading-relaxed">Ask follow-up questions about the selected document using your voice.</p>
                 </div>
                 <button
                   onClick={openConvAI}
@@ -679,7 +682,7 @@ function SpeakInner() {
                             </div>
                             <p style={{ color: "#f0e8d8" }} className="text-xs truncate">{item.question}</p>
                           </div>
-                          {USE_BROWSER_TTS && item.browserText
+                          {item.browserText
                             ? <BrowserAudioPlayer text={item.browserText} title={`Response to: ${item.question.slice(0, 40)}${item.question.length > 40 ? "..." : ""}`} autoPlay={idx === 0} />
                             : item.audioUrl ? <AudioPlayer audioUrl={item.audioUrl} title={`Response to: ${item.question.slice(0, 40)}${item.question.length > 40 ? "..." : ""}`} /> : null}
                         </motion.div>

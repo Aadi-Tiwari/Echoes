@@ -47,17 +47,20 @@ function buildNarrationScript(title: string, context: string, text: string): str
 
 export async function POST(request: Request) {
   try {
-    const { text, title, context, voiceId } = await request.json();
+    const { text, title, context, voiceId } = (await request.json().catch(() => ({}))) || {};
 
     if (!text || typeof text !== "string" || !text.trim()) {
       return Response.json({ error: "text is required" }, { status: 400 });
+    }
+    if ([title, context, voiceId].some(value => value !== undefined && typeof value !== "string")) {
+      return Response.json({ error: "Title, context, and voice ID must be strings." }, { status: 400 });
     }
 
     const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey || apiKey === "your_key_here") {
       return Response.json(
-        { error: "ElevenLabs API key not configured. Add ELEVENLABS_API_KEY to .env.local" },
-        { status: 500 }
+        { error: "Audio could not be generated. Use your device's voice instead." },
+        { status: 503 }
       );
     }
 
@@ -83,9 +86,7 @@ export async function POST(request: Request) {
         "X-Content-Type-Options": "nosniff",
       },
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[narrate] error:", message);
-    return Response.json({ error: message }, { status: 500 });
+  } catch {
+    return Response.json({ error: "Audio could not be generated. Use your device's voice instead." }, { status: 502 });
   }
 }

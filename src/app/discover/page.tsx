@@ -41,6 +41,7 @@ export default function DiscoverPage() {
   const [items,              setItems]              = useState<ArchiveItem[]>([]);
   const [loading,            setLoading]            = useState(false);
   const [searched,           setSearched]           = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [total,              setTotal]              = useState(0);
   const [stitching,          setStitching]          = useState(false);
   const [stitchedAudio,      setStitchedAudio]      = useState<string | null>(null);
@@ -64,13 +65,15 @@ export default function DiscoverPage() {
   const search = useCallback(async (q: string) => {
     if (!q.trim()) return;
     setLoading(true); setSearched(true); setItems([]);
+    setSearchError(null); setTotal(0);
     setStitchedAudio(null); setStitchedBrowserText(null); setStitchError(null);
     try {
       const res = await fetch(`/api/chronicling?query=${encodeURIComponent(q)}`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Archive search is unavailable.");
       setItems(data.items || []);
       setTotal(data.totalItems || 0);
-    } catch { setItems([]); }
+    } catch (error) { setSearchError(error instanceof Error ? error.message : "Archive search is unavailable."); }
     finally { setLoading(false); }
   }, []);
 
@@ -575,7 +578,7 @@ export default function DiscoverPage() {
                   ) : (
                     <div className="flex flex-col md:flex-row gap-4 items-stretch">
                       <div className="md:w-[45%] flex-shrink-0">
-                        {USE_BROWSER_TTS && narrateText
+                        {!narrateAudioUrl && narrateText
                           ? <BrowserAudioPlayer
                               text={narrateText}
                               title={formatTitle(activeItem.title, activeItem.newspaper)}
@@ -986,8 +989,8 @@ export default function DiscoverPage() {
               <Compass size={24} style={{ color: "#4a3c2c" }} strokeWidth={1.5} />
             </div>
             <div className="text-center">
-              <p style={{ color: "#7a6550" }} className="text-sm mb-1">No documents found for that search.</p>
-              <p style={{ color: "#3a2d1e" }} className="text-xs">Try - war, invention, freedom, election...</p>
+              <p role={searchError ? "alert" : undefined} style={{ color: "#7a6550" }} className="text-sm mb-1">{searchError || "No documents found for that search."}</p>
+              {!searchError && <p style={{ color: "#3a2d1e" }} className="text-xs">Try - war, invention, freedom, election...</p>}
             </div>
           </motion.div>
         )}
