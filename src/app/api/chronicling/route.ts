@@ -1,4 +1,3 @@
-import { type NextRequest } from "next/server";
 
 function mapItem(item: Record<string, unknown>) {
   const descArr = Array.isArray(item.description) ? item.description as string[] : [];
@@ -30,9 +29,10 @@ function mapItem(item: Record<string, unknown>) {
   };
 }
 
-export async function GET(request: NextRequest) {
-  const query = request.nextUrl.searchParams.get("query") || "history";
-  const page = request.nextUrl.searchParams.get("page") || "1";
+export async function GET(request: Request) {
+  const params = new URL(request.url).searchParams;
+  const query = params.get("query") || "history";
+  const page = params.get("page") || "1";
 
   try {
     // Fetch 3x more results so we can diversify across newspapers/cities
@@ -41,10 +41,11 @@ export async function GET(request: NextRequest) {
     const res = await fetch(url, {
       next: { revalidate: 1800 },
       headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!res.ok) {
-      return Response.json({ items: [], totalItems: 0 }, { status: 200 });
+      return Response.json({ error: "The archive service is unavailable. Please try again later." }, { status: 502 });
     }
 
     const data = await res.json();
@@ -82,8 +83,7 @@ export async function GET(request: NextRequest) {
     }
 
     return Response.json({ items: diverse, totalItems });
-  } catch (err) {
-    console.error("LOC search error:", err);
-    return Response.json({ items: [], totalItems: 0 });
+  } catch {
+    return Response.json({ error: "The archive service could not be reached. Please try again later." }, { status: 502 });
   }
 }
