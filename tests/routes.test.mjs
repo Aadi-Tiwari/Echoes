@@ -75,3 +75,26 @@ test("OCR preserves text and labels a provider fallback", async () => {
   assert.equal(body.cleaned, "This document contains readable words.");
   assert.equal(body.fallback, true);
 });
+
+test("questions include the end of the document as source material", async () => {
+  process.env.GROQ_API_KEY = "test-only";
+  let sent;
+  globalThis.fetch = async (_url, init) => {
+    sent = JSON.parse(init.body);
+    return Response.json({ choices: [{ message: { content: "The letter was signed by Ada." } }] });
+  };
+  const documentText = "Background material. ".repeat(120) + "Signed, Ada.";
+  const response = await answer(request({ question: "Who signed this?", documentText }));
+  assert.equal(response.status, 200);
+  assert.ok(sent.messages.some((message) => message.role === "user" && message.content.includes(documentText)));
+  assert.match(sent.messages[0].content, /not.*supported|does not.*support/i);
+});
+
+test("oversized documents are rejected without silently truncating them", async () => {
+  process.env.GROQ_API_KEY = "test-only";
+  let called = false;
+  globalThis.fetch = async () => { called = true; return Response.json({}); };
+  const response = await answer(request({ question: "Who?", documentText: "x".repeat(50_001) }));
+  assert.equal(response.status, 400);
+  assert.equal(called, false);
+});
