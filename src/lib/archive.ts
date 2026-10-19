@@ -1,46 +1,40 @@
-export interface ArchiveItem {
+export interface ArchiveEntry {
   id: string;
+  type: "document" | "heirloom" | "discovery";
   title: string;
-  text: string;
-  type: "document" | "heirloom" | "discover";
   savedAt: number;
+  text?: string;
+  context?: string;
+  thumbnail?: string | null;
+  timeline?: Array<{ year: string; yearNum: number; sentence: string }>;
 }
 
-const KEY = "echoes_archive";
+const KEY = "echoes-archive";
+const LEGACY_KEY = "echoes_archive";
 
-function read(): ArchiveItem[] {
-  if (typeof window === "undefined") return [];
+function parseEntries(raw: string | null): ArchiveEntry[] {
   try {
-    return JSON.parse(localStorage.getItem(KEY) || "[]");
-  } catch {
-    return [];
-  }
+    const entries = JSON.parse(raw || "[]");
+    if (!Array.isArray(entries)) return [];
+    return entries.filter((entry) => entry && typeof entry.id === "string" && typeof entry.title === "string" &&
+      typeof entry.savedAt === "number" && ["document", "heirloom", "discovery", "discover"].includes(entry.type))
+      .map((entry) => ({ ...entry, type: entry.type === "discover" ? "discovery" : entry.type }));
+  } catch { return []; }
 }
 
-function write(items: ArchiveItem[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(KEY, JSON.stringify(items));
+export function readArchive(storage: Storage): ArchiveEntry[] {
+  const current = parseEntries(storage.getItem(KEY));
+  const legacy = parseEntries(storage.getItem(LEGACY_KEY));
+  if (!legacy.length) return current;
+  const entries = [...current, ...legacy.filter((entry) => !current.some((saved) => saved.id === entry.id))]
+    .sort((a, b) => b.savedAt - a.savedAt);
+  try {
+    storage.setItem(KEY, JSON.stringify(entries));
+    storage.removeItem(LEGACY_KEY);
+  } catch { /* Keep the legacy copy if storage is full or unavailable. */ }
+  return entries;
 }
 
-export function saveToArchive(item: Omit<ArchiveItem, "id" | "savedAt">): ArchiveItem {
-  const items = read();
-  const newItem: ArchiveItem = {
-    ...item,
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    savedAt: Date.now(),
-  };
-  write([newItem, ...items]);
-  return newItem;
-}
-
-export function getArchive(): ArchiveItem[] {
-  return read();
-}
-
-export function removeFromArchive(id: string): void {
-  write(read().filter((item) => item.id !== id));
-}
-
-export function isInArchive(title: string): boolean {
-  return read().some((item) => item.title === title);
+export function persistArchive(storage: Storage, entries: ArchiveEntry[]) {
+  storage.setItem(KEY, JSON.stringify(entries));
 }

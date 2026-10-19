@@ -2,27 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-export interface ArchiveEntry {
-  id: string;
-  type: "document" | "heirloom" | "discovery";
-  title: string;
-  savedAt: number;
-  text?: string;
-  context?: string;
-  thumbnail?: string | null;
-  timeline?: Array<{ year: string; yearNum: number; sentence: string }>;
-}
-
-const KEY = "echoes-archive";
+import { readArchive, persistArchive, type ArchiveEntry } from "@/lib/archive";
+export type { ArchiveEntry } from "@/lib/archive";
 
 function load(): ArchiveEntry[] {
   if (typeof window === "undefined") return [];
-  try { return JSON.parse(localStorage.getItem(KEY) || "[]"); }
+  try { return readArchive(localStorage); }
   catch { return []; }
 }
 
 function persist(entries: ArchiveEntry[]) {
-  try { localStorage.setItem(KEY, JSON.stringify(entries)); } catch { /* quota */ }
+  try { persistArchive(localStorage, entries); } catch { /* quota */ }
 }
 
 export function useArchive() {
@@ -52,6 +42,6 @@ export function useArchive() {
 
 export function getArchiveCount(): number {
   if (typeof window === "undefined") return 0;
-  try { return (JSON.parse(localStorage.getItem(KEY) || "[]") as unknown[]).length; }
+  try { return (readArchive(localStorage) as unknown[]).length; }
   catch { return 0; }
 }
